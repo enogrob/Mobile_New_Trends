@@ -1,0 +1,2672 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+## Copyright (c) 2010~13 by ERICSSON
+## Prepared : Roberto Nogueira
+## File     : Rakefile
+## Version  : PA82
+## Date     : 2015-07-06
+## Project  : Project 2010~14 RICC Automation - Brazil
+## Reference: ruby 2.2.2p95 (2015-04-13 revision 50295) [i386-cygwin]
+## Rake     : rake (10.4.2)
+##
+## Purpose  : Develop a Rake system in order to help perfoming RICC, O&M and
+##            SI activities in WRAN Integration.
+
+require 'rake'
+require 'yaml'
+require 'find'
+require 'rainbow'
+require 'rainbow/ext/string' 
+#require 'win32/clipboard'
+#include Win32
+
+RICC_PATH=ENV['HOME']
+RICC_TEMPLATES="#{RICC_PATH}/RICC_Templates"
+RICC_ARCHIVE="#{RICC_PATH}/RICC_Archive"
+
+TODAY="#{RICC_PATH}/TODAY"
+CLOUD="#{RICC_PATH}/CLOUD"
+
+RICC_DATA_FILE="ricc_data.yaml"
+
+RICC_NODEBS_CLARO="WCIn - Relatório de Sites.txt"
+
+CMD_REGEX = /^\[\W\/\w+\]\$|^\[local\]\w+#|^\[local\]\w+>|^\w+>|^\w+@\w+>|^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}>/
+
+CMD_REGEX2 = /(^\w+)>/
+
+task :default => ["ricc_print"]
+
+desc "RICC associations for RICC activities"
+task :ricc_associations, [:a_activity] do |t, args|
+	puts "=> ricc_associations: creating for RICC activities...".bright
+	puts
+	args.with_defaults(:a_activity => "fullip")
+	activity = args.a_activity
+	system %{cd "#{RICC_TEMPLATES}"; cp template_associations.xls "#{TODAY}/ricc_associations.xls"}
+	set_workbook_associations(activity)
+ 	puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la #{TODAY}/ricc_associations.xls}
+    puts
+    file_to_open ="C:\\users\\eronogu\\Documents\\Projects_RICC\\TODAY\\ricc_associations.xls"
+    system %{cmd /c "start #{file_to_open}"}
+end
+
+desc "RICC sftp for secureCRT"
+task :ricc_sftp do
+	puts "=> ricc_sftp: generating script sftp for secureCRT...".bright
+	puts
+	system %{cd "#{RICC_TEMPLATES}"; cp template_sftp.vbs "#{TODAY}/ricc_sftp.vbs"}
+ 	puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la #{TODAY}/ricc_sftp.vbs}
+    puts
+end
+
+def set_workbook_associations(a_activity)
+    excel = WIN32OLE.new("excel.application")
+#	excel['Visible'] = TRUE
+	workbook =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\ricc_associations.xls")
+	worksheet = workbook.Worksheets("ASSOCIATIONS")
+	
+	sites_data = Clipboard.data
+	sites_data = sites_data.split("\r\n")
+	n = 0
+	if a_activity == 'rehoming' then
+	sites_data.each do |line|
+		line = line.split
+		line.each do |node|
+			worksheet.Cells(20+n,2).offset(0,0).value = line[0] if line[0] != nil and line[0] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,2).value = line[1] if line[1] != nil and line[1] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,3).value = line[2] if line[2] != nil and line[2] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,4).value = line[3] if line[3] != nil and line[3] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,5).value = line[4] if line[4] != nil and line[4] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/	
+		end
+		n = n + 1
+	end
+	else
+		sites_data.each do |line|
+		line = line.split
+		line.each do |node|
+			worksheet.Cells(20+n,2).offset(0,2).value = line[0] if line[0] != nil and line[0] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,0).value = line[1] if line[1] != nil and line[1] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+			worksheet.Cells(20+n,2).offset(0,4).value = line[3] if line[3] != nil and line[3] !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/
+		end
+		n = n + 1
+	end
+	end
+
+	workbook.Save()
+	workbook.Close()
+	excel.Quit()
+end
+
+desc "RICC init for TODAY directory"
+task :ricc_init, [:a_activity] do |t, args| 
+	puts "=> ricc_init: starting TODAY directory...".bright
+	puts
+	args.with_defaults(:a_activity => "fullip")
+	activity = args.a_activity
+	if activity == 'movistar' then
+		system %{cd "#{RICC_TEMPLATES}"; cp template_movistar.xls "#{TODAY}/ricc_movistar.xls"}
+		system %{cd "#{RICC_TEMPLATES}"; cp template_portadora.xls "#{TODAY}/ricc_portadora.xls"}
+		system %{cd "#{RICC_TEMPLATES}"; cp log_antes_RBS.mos "#{TODAY}/"}
+		system %{cd "#{RICC_TEMPLATES}"; cp log_antes_RNC.mos "#{TODAY}/"}
+		system %{cd "#{RICC_TEMPLATES}"; cp log_depois_RBS.mos "#{TODAY}/"}
+		system %{cd "#{RICC_TEMPLATES}"; cp log_depois_RNC.mos "#{TODAY}/"}
+		system %{cd "#{RICC_TEMPLATES}"; cp RBS_resources_Tx_secondCarrier.mos "#{TODAY}/"}
+ 		puts "-- contents of TODAY directory:".color(:yellow)
+    	system %{ls -la #{TODAY}/*.xls}
+    	system %{ls -la #{TODAY}/*.mos}
+    	puts
+    	file_to_open ="C:\\users\\eronogu\\Documents\\Projects_RICC\\TODAY\\ricc_movistar.xls"
+    	system %{cmd /c "start #{file_to_open}"}
+	else
+		Rake::Task['ricc_sessions'].invoke
+		Rake::Task['ricc_sftp'].invoke
+		Rake::Task['ricc_associations'].invoke(activity)
+	end
+end
+
+desc "RICC start for TODAY directory"
+task :ricc_start do
+	puts "=> ricc_start: starting TODAY directory...".bright
+	puts
+	get_ricc_data
+ 	system %{cd "#{TODAY}"}
+ 	@ricc_start = get_timestamp
+ 	save_ricc_data
+ 	puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la #{TODAY}/ricc_data.yaml}
+    puts
+end
+
+def get_ricc_data
+	@ricc_start = 'start'
+   	@ricc_stop = 'stop'
+	@ricc_site = cmdattr('pv $nodeb_', /^\$nodeb_name\s=\s(\w+)$/) || 'site'
+	@ricc_activity = 'activity'
+	@ricc_customer = cmdattr('print $ricc_customer', /^(\w+)$/) || 'customer'
+	@ricc_iublink = cmdattrif('pv $rnc_', /^\$rnc_nodebiub\s=\s(\w+)$/,@ricc_site) || 'iublink'
+	@ricc_cellnames = cmdgetif('pv $rnc_',@ricc_site)
+	if @ricc_cellnames != nil
+		cellnames = []
+		@ricc_cellnames.each do |line|
+			cellnames << line if line.include? ">>>"
+		end
+		@ricc_cellnames = cellnames
+		@ricc_cellnames = @ricc_cellnames.join
+		@ricc_cellnames = @ricc_cellnames.gsub(" reservedBy = RncFunction=1,UtranCell=","")
+		@ricc_cellnames = @ricc_cellnames.split('>>>')
+		@ricc_cellnames = @ricc_cellnames[1..-1]
+		@ricc_cellnames.collect! {|a| a.rstrip}
+		@ricc_cellnames = @ricc_cellnames[0][0..-2] + "-" + @ricc_cellnames.join("/").gsub(@ricc_cellnames[0][0..-2],"")
+    end
+	@ricc_cellnames ||= 'cellnames'
+	@ricc_name = 'riccname'
+	@ricc_activities = 'riccactivities'
+	@ricc_sites_data = 'riccsitesdata'
+end
+
+def save_ricc_data
+	File.open("#{TODAY}/#{RICC_DATA_FILE}", 'w') do |f| 
+		ricc_data = {
+			'Start' => @ricc_start,
+			'Stop' => @ricc_stop,
+			'Site' => @ricc_site,
+		    'Activity' => @ricc_activity,
+		    'Customer' => @ricc_customer,
+		    'IubLink' => @ricc_iublink,
+		    'CellNames' => @ricc_cellnames,
+		    'RICCName' => @ricc_name,
+		    'RICCActivities' => @ricc_activities,
+			'RICCSitesData' => @ricc_sites_data 
+		}	 
+		YAML.dump(ricc_data, f)
+	end	
+end
+
+def load_ricc_data
+	if !File.exist?("#{TODAY}/#{RICC_DATA_FILE}")
+    	puts "-- File: #{RICC_DATA_FILE} do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+	ricc_data = YAML.load(File.open("#{TODAY}/#{RICC_DATA_FILE}"))
+    @ricc_start = ricc_data['Start']
+    @ricc_stop = ricc_data['Stop']
+    @ricc_site = ricc_data['Site']
+    @ricc_activity = ricc_data['Activity']
+    @ricc_customer = ricc_data['Customer']
+    @ricc_iublink = ricc_data['IubLink']
+    @ricc_cellnames = ricc_data['CellNames']
+    @ricc_name = ricc_data['RICCName'] || 'riccname'
+    @ricc_activities = ricc_data['RICCActivities']
+    @ricc_sites_data = ricc_data['RICCSitesData']
+end
+
+desc "RICC define RICC Activities"
+task :ricc_define, [:a_sites, :a_activity] do |t, args|
+	puts "=> ricc_define: getting nodeb data...".bright
+	puts
+	args.with_defaults(:a_sites => "no_site", :a_activity => "fullip")
+	sites = args.a_sites
+	activity = args.a_activity.downcase
+	sites = sites.split
+	load_ricc_data
+	sites.each do |site|
+		get_data(site, activity)
+		prt_data(activity)
+	end
+	if @ricc_activities.class == String then
+		@ricc_activities = []
+	end
+	if @ricc_activity == 'activity' then
+ 		@ricc_activity = activity.capitalize
+ 	end
+ 	ricc_activity = {'sites'=> sites, 'activity'=> activity.capitalize}
+ 	@ricc_activities << ricc_activity if !@ricc_activities.include? ricc_activity 
+ 	save_ricc_data
+end
+
+desc "RICC update RICC Activities"
+task :ricc_update, [:a_sites, :a_activity] do |t, args|
+	puts "=> ricc_update: updating nodeb data...".bright
+	puts
+	args.with_defaults(:a_sites => "no_site", :a_activity => "fullip")
+	sites = args.a_sites
+	activity = args.a_activity.downcase
+	load_ricc_data
+	if sites != "no_site" then
+		sites = sites.split
+		sites.each do |site|
+			puts "-- #{site} - #{activity}".color(:yellow)
+			@ricc_sites_data.each do |nodeb|
+				if nodeb[site] != nil then
+					@ricc_sites_data.delete(nodeb)	
+				end
+			end
+			get_data(site, activity)
+			prt_data(activity)
+		end
+	else
+		if @ricc_activities == 'riccactivities' then
+    		puts "-- Error: #{@ricc_activities} not defined !".color(:red)
+    		puts
+    		exit
+		end	
+		@ricc_activities.each do |a| 
+    		sites = a['sites'] 
+    		activity = a['activity'].downcase   	
+			sites.each do |site|
+				puts "-- #{site} - #{activity}".color(:yellow)
+				@ricc_sites_data.each do |nodeb|
+					if nodeb[site] != nil then
+						@ricc_sites_data.delete(nodeb)	
+					end
+				end
+				get_data(site, activity)
+				prt_data(activity)
+			end
+		end
+	end
+#	get_newips
+ 	save_ricc_data
+end
+
+def get_data(a_site, a_activity)
+	@nodeb_tx = cmdattrif('pv $nodeb_', /^\$nodeb_tx\s=\s(\w+)$/, a_site) || "<tx>"
+	@nodeb_name = cmdattrif('pv $nodeb_', /^\$nodeb_name\s=\s(\w+)$/, a_site) || "<nodeb>"
+	@nodeb_timestamp = cmdattrif('pv $nodeb_', /^\$nodeb_timestamp\s=\s(\w+)$/, a_site) || "<nodeb_timestamp>"	
+	@ricc_customer = cmdattr('print $ricc_customer', /^(\w+)$/) || 'customer'
+	if @ricc_customer == "CLARO" then
+    	@nodeb_region = case @nodeb_name[1..2]
+		when 'SI' then "SPI"
+		when 'SM' then "SPM"
+		else
+			@nodeb_name[1..2]
+		end
+	elsif @ricc_customer == "TIM" then
+		@nodeb_region = case @nodeb_name[0..1]
+		when 'SP' then "SPO"
+		when 'TC' then "TCO"
+		else
+			@nodeb_name[0..1]
+		end
+	elsif @ricc_customer == "VIVO" then
+		@nodeb_region = @nodeb_name.split('_')[1]
+	else
+	end
+	
+	@nodeb_name = @nodeb_name.split('_')[0] if @ricc_customer == 'VIVO'
+	
+	@nodeb_ip = cmdattrif('pv $nodeb_', /^\$nodeb_ip\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<nodeb_ipold>"
+	@nodeb_model = cmdattrif('pv $nodeb_', /^\$nodeb_model\s=\s(\w+)$/, a_site) || "<nodeb_model>"
+	@nodeb_vid1 = cmdattrif('pv $nodeb_', /^\$nodeb_vid1\s=\s(\w+)$/, a_site) || "<nodeb_vid1>"
+	@nodeb_vid2 = cmdattrif('pv $nodeb_', /^\$nodeb_vid2\s=\s(\w+)$/, a_site) || "<nodeb_vid2>"
+	@nodeb_rbsid = cmdattrif('pv $nodeb_', /^\$nodeb_rbsid\s=\s(\w+)$/, a_site) || "<nodeb_rbsid>"
+	@nodeb_defaultrouter1 = cmdattrif('pv $nodeb_', /^\$nodeb_defaultrouter1\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<nodeb_defaultrouter1>"
+	@nodeb_defaultrouter2 = cmdattrif('pv $nodeb_', /^\$nodeb_defaultrouter2\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<nodeb_defaultrouter2>"
+	@nodeb_hostet = cmdattrif('pv $nodeb_', /^\$nodeb_hostet\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<nodeb_hostet>"
+	
+	@rnc_name = cmdattrif('pv $rnc_', /^\$rnc_name\s=\s(\w+)$/, a_site) || "<rnc>"
+	@rnc_nodebname = cmdattrif('pv $rnc_', /^\$rnc_nodebname\s=\s(\w+)$/, a_site) || "<rnc_nodebname>"
+	@rnc_timestamp = cmdattrif('pv $rnc_', /^\$rnc_timestamp\s=\s(\w+)$/, a_site) || "<rnc_timestamp>"	
+	@rnc_nodebiub = cmdattrif('pv $rnc_', /^\$rnc_nodebiub\s=\s(\w+)$/, a_site) || "<rnc_nodebiub>"
+	@rnc_nodebutrancell = cmdattrif('pv $rnc_', /UtranCell=(\w+)$/, a_site)
+	@rnc_nodebutrancell = @rnc_nodebutrancell[0..-2] if @rnc_nodebutrancell != nil
+	@rnc_nodebutrancell ||= "<rnc_nodebutrancell>"
+	@rnc_hostets = cmdattrif('pv $rnc_', /^\$rnc_hostets\s=\s(\w+)$/, a_site) || "<rnc_hostets>"
+	@rnc_defaultrouter = cmdattrif('pv $rnc_', /^\$rnc_defaultrouter\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<rnc_defaultrouter>"
+	@rnc_hostet = cmdattrif('pv $rnc_', /^\$rnc_hostet\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<rnc_hostet>"
+
+
+	@rncto_name = cmdattrif('pv $rncto_', /^\$rncto_name\s=\s(\w+)$/, a_site) || "<rncto>"
+	@rncto_nodebname = cmdattrif('pv $rncto_', /^\$rncto_nodebname\s=\s(\w+)$/, a_site) || "<rncto_nodebname>"
+	@rncto_timestamp = cmdattrif('pv $rncto_', /^\$rncto_timestamp\s=\s(\w+)$/, a_site) || "<rncto_timestamp>"	
+	@rncto_hostets = cmdattrif('pv $rncto_', /^\$rncto_hostets\s=\s(\w+)$/, a_site) || "<rncto_hostets>"
+	@rncto_defaultrouter = cmdattrif('pv $rncto_', /^\$rncto_defaultrouter\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<rncto_defaultrouter>"
+	@rncto_hostet = cmdattrif('pv $rncto_', /^\$rncto_hostet\s=\s(\d*\.\d*\.\d*\.\d*)$/, a_site) || "<rncto_hostet>"
+	
+	@rxi_name = cmdattrif('pv $rxi_', /^\$rxi_name\s=\s(\w+)$/, a_site) || "<rxi>"
+	@rxi_timestamp = cmdattrif('pv $rxi_', /^\$rxi_timestamp\s=\s(\w+)$/, a_site) || "<rxi_timestamp>"	
+	@rxi_atmport = cmdattrif('pv $rxi_', /^\$rxi_atmport\s=\s(\w+\W\w+\W\w+)$/, a_site) 
+	@rxi_atmport = @rxi_atmport+'$' if @rxi_atmport != nil
+	@rxi_atmport ||= "<rxi_atmport>"
+	@rxi_portlist = cmdgetif('pv $rxi_', a_site)
+	@rxi_e1 = nil
+	@rxi_e2 = nil
+	@rxi_e3 = nil
+	@rxi_e4 = nil
+	if @rxi_portlist != nil
+		@rxi_portlist = @rxi_portlist.join
+		@rxi_portlist = @rxi_portlist.gsub("physicalPortList =","")
+		@rxi_portlist = @rxi_portlist.split('>>>')
+		@rxi_e1 = @rxi_portlist[1]
+		@rxi_e2 = @rxi_portlist[2]
+		@rxi_e3 = @rxi_portlist[3]
+		@rxi_e4 = @rxi_portlist[4]
+		@rxi_e1 = @rxi_portlist[1].split(',')[0..-2].join(',').lstrip+'$' if @rxi_e1 != nil 
+		@rxi_e2 = @rxi_portlist[2].split(',')[0..-2].join(',').lstrip+'$' if @rxi_e2 != nil 
+		@rxi_e3 = @rxi_portlist[3].split(',')[0..-2].join(',').lstrip+'$' if @rxi_e3 != nil 
+		@rxi_e4 = @rxi_portlist[4].split(',')[0..-2].join(',').lstrip+'$' if @rxi_e4 != nil 
+    end
+	@rxi_e1 = @rxi_e1 || "<rxi_e1>"
+	@rxi_e2 = @rxi_e2 || "<rxi_e2>"
+	@rxi_e3 = @rxi_e3 || "<rxi_e3>"
+	@rxi_e4 = @rxi_e4 || "<rxi_e4>"
+	
+	@rxito_name = cmdattrif('pv $rxito_', /^\$rxito_name\s=\s(\w+)$/, a_site) || "<rxito>"
+	@rxito_timestamp = cmdattrif('pv $rxito_', /^\$rxito_timestamp\s=\s(\w+)$/, a_site) || "<rxito_timestamp>"	
+	@nodeb_ipnew = "<nodeb_ipnew>"
+	
+	nodeb_data = {
+		'nodeb_name'   => @nodeb_name,
+		'nodeb_timestamp'   => @nodeb_timestamp,
+		'nodeb_tx'     => @nodeb_tx,
+		'nodeb_region' => @nodeb_region,
+		'nodeb_ip'     => @nodeb_ip,
+		'nodeb_ipnew'  => @nodeb_ipnew,
+		'nodeb_model'  => @nodeb_model,
+		'nodeb_vid1'   => @nodeb_vid1,
+		'nodeb_vid2'   => @nodeb_vid2,
+		'nodeb_rbsid'  => @nodeb_rbsid,
+		'nodeb_defaultrouter1' => @nodeb_defaultrouter1,
+		'nodeb_defaultrouter2' => @nodeb_defaultrouter2,
+		'nodeb_hostet'      => @nodeb_hostet,
+		
+		'rnc_name'           => @rnc_name,
+		'rnc_timestamp'   => @rnc_timestamp,
+		'rnc_nodebiub'       => @rnc_nodebiub,
+		'rnc_nodebutrancell' => @rnc_nodebutrancell,
+		'rnc_hostets'        => @rnc_hostets,
+		'rnc_defaultrouter'  => @rnc_defaultrouter,
+		'rnc_hostet'         => @rnc_hostet,
+		
+		'rncto_name'          => @rncto_name,
+		'rncto_timestamp'   => @rncto_timestamp,
+		'rncto_hostets'       => @rncto_hostets,	
+		'rncto_defaultrouter' => @rncto_defaultrouter,
+		'rncto_hostet'        => @rncto_hostet,
+		
+		'rxi_name'     => @rxi_name,
+		'rxi_timestamp'   => @rxi_timestamp,
+		'rxi_atmport'  => @rxi_atmport,
+		'rxi_e1'       => @rxi_e1,
+		'rxi_e2'       => @rxi_e2,
+		'rxi_e3'       => @rxi_e3,
+		'rxi_e4'       => @rxi_e4,
+		
+		'rxito_name'   => @rxito_name,
+		'rxito_timestamp'   => @rxito_timestamp	
+	}
+	if @ricc_sites_data == 'riccsitesdata' or @ricc_sites_data == nil then
+		@ricc_sites_data = []
+	end
+	@ricc_sites_data << {@nodeb_name => nodeb_data}
+end
+
+def prt_data(a_activity)
+	puts "-- printing nodes data...".color(:yellow)
+    puts
+	print "NODEB         : ".color(:cyan);puts @nodeb_name.color(:green).bright
+	print "TIMESTAMP     : ".color(:cyan);puts @nodeb_timestamp.color(:green)
+	print "REGION        : ".color(:cyan);puts @nodeb_region.color(:green)
+	print "TX            : ".color(:cyan);puts @nodeb_tx.color(:green)
+	print "IP OLD        : ".color(:cyan);puts @nodeb_ip.color(:green)
+	print "IP NEW        : ".color(:cyan);puts @nodeb_ipnew.color(:green)
+	print "MODEL         : ".color(:cyan);puts @nodeb_model.color(:green)
+	print "VLAN1         : ".color(:cyan);puts @nodeb_vid1.color(:green)
+	print "VLAN2         : ".color(:cyan);puts @nodeb_vid2.color(:green)
+	print "RBSID         : ".color(:cyan);puts @nodeb_rbsid.color(:green)
+	print "DEFAULTROUTER1: ".color(:cyan);puts @nodeb_defaultrouter1.color(:green)
+	print "DEFAULTROUTER2: ".color(:cyan);puts @nodeb_defaultrouter2.color(:green)
+	print "HOSTET        : ".color(:cyan);puts @nodeb_hostet.color(:green)
+	puts
+	print "RNC           : ".color(:cyan);puts @rnc_name.color(:red)
+	print "TIMESTAMP     : ".color(:cyan);puts @rnc_timestamp.color(:red)
+	print "IUB           : ".color(:cyan);puts @rnc_nodebiub.color(:red)
+	print "UTRANCELL     : ".color(:cyan);puts @rnc_nodebutrancell.color(:red)
+	print "HOSTETS       : ".color(:cyan);puts @rnc_hostets.color(:red)
+	print "DEFAULTROUTER : ".color(:cyan);puts @rnc_defaultrouter.color(:red)
+	print "HOSTET        : ".color(:cyan);puts @rnc_hostet.color(:red)
+	
+	if a_activity == 'rehoming' then
+		puts
+		print "RNCTO         : ".color(:cyan);puts @rncto_name.color(:red)
+		print "TIMESTAMP     : ".color(:cyan);puts @rncto_timestamp.color(:red)
+		print "HOSTETS       : ".color(:cyan);puts @rncto_hostets.color(:red)
+		print "DEFAULTROUTER : ".color(:cyan);puts @rncto_defaultrouter.color(:red)
+		print "HOSTET        : ".color(:cyan);puts @rncto_hostet.color(:red)
+	end
+	
+	puts
+	
+	if @rxi_name =~ /^RXI/ then
+		print "RXI           : ".color(:cyan);puts @rxi_name.color(:magenta)
+		print "TIMESTAMP     : ".color(:cyan);puts @rxi_timestamp.color(:magenta)
+		print "ATMPORT       : ".color(:cyan);puts @rxi_atmport.color(:magenta)
+		print "E1            : ".color(:cyan);puts @rxi_e1.color(:magenta)
+		print "E2            : ".color(:cyan);puts @rxi_e2.color(:magenta)
+		print "E3            : ".color(:cyan);puts @rxi_e3.color(:magenta)
+		print "E4            : ".color(:cyan);puts @rxi_e4.color(:magenta)
+	end
+	
+	if a_activity == 'rehoming' and @rxito_name =~ /^RXI/ then
+		puts
+		print "RXITO         : ".color(:cyan);puts @rxito_name.color(:magenta)
+		print "TIMESTAMP     : ".color(:cyan);puts @rxito_timestamp.color(:magenta)
+	end
+	
+	puts
+end	
+
+desc "RICC scripts for RICC activities"
+task :ricc_scripts, [:a_sites, :a_activity, :a_action] do |t, args|
+	puts "=> ricc_scripts: building activity scripts...".bright
+	puts
+	args.with_defaults(:a_sites => "no_site", :a_activity => "fullip", :a_action => 'all')
+	sites = args.a_sites
+	activity = args.a_activity.downcase
+	action = args.a_action
+	if sites != "no_site" then
+		sites = sites.split
+		sites.each do |site|
+			puts "-- #{site} - #{activity}".color(:yellow)
+			get_nodeb_data(site)
+			case action
+			when 'lst' then lst_scripts(activity)
+			when 'get' then get_scripts(activity)
+			when 'set' then set_scripts_workbook(site, activity)
+			when 'ftp' then ftp_scripts(activity)
+			when 'all' then lst_scripts(activity)
+			           		get_scripts(activity)
+			           		set_scripts_workbook(site, activity)
+			           		ftp_scripts(activity)
+			else
+			end
+			puts
+		end
+	else
+		load_ricc_data
+		if @ricc_activities == 'riccactivities' then
+    		puts "-- Error: #{@ricc_activities} not defined !".color(:red)
+    		puts
+    		exit
+		end	
+		@ricc_activities.each do |a| 
+    		sites = a['sites'] 
+    		activity = a['activity'].downcase   	
+			sites.each do |site|
+				puts "-- #{site} - #{activity}".color(:yellow)
+				get_nodeb_data(site)
+				case a_action
+				when 'lst' then lst_scripts(activity)
+				when 'get' then get_scripts(activity)
+				when 'set' then set_scripts_workbook(site, activity)
+				when 'ftp' then ftp_scripts(activity)
+				when 'all' then lst_scripts(activity)
+			               		get_scripts(activity)
+				           		set_scripts_workbook(site, activity)
+				           		ftp_scripts(activity)
+				else
+				end
+				puts
+			end
+		end
+	end
+end
+
+def lst_scripts(a_activity)
+	if Dir["/cygdrive/x"].empty?
+		system %{net use 'x:' '\\\\EAMCS.ERICSSON.SE\\EBRSPDFS01\\group11\\RICC'}
+    end 
+#   @nodeb_name = @nodeb_name.split('_')[0] if @ricc_customer == 'VIVO'
+	if a_activity == 'fullip' then
+		if @nodeb_tx != 'IP' then
+			puts "-- #{@nodeb_name} - listing scripts".color(:green)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*IP/RBS;
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo
+			}
+			puts
+			puts "-- #{@rnc_name} - listing scripts".color(:red)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*IP/#{@rnc_name};
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo
+			}
+			puts
+		end	
+	end
+	if a_activity == 'dualstack' then
+		if @nodeb_tx != 'IP' then
+			puts "-- #{@nodeb_name} - listing scripts".color(:green)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/RBS;
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo	
+			}
+			puts
+			puts "-- #{@rnc_name} - listing scripts".color(:red)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/#{@rnc_name};
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo
+			}
+			puts
+		end	
+	end
+	if a_activity == 'rehoming' then
+		puts "-- #{@nodeb_name} - listing scripts".color(:green)
+		system %{
+			cd /cygdrive/x;
+			cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+			cd REFILIA*#{@nodeb_tx}/RBS;
+			pwd;
+			ls -lst *#{@nodeb_name}*.mo
+		}
+		puts
+		puts "-- #{@rnc_name} - listing scripts".color(:red)
+		system %{
+			cd /cygdrive/x;
+			cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+			cd REFILIA*#{@nodeb_tx}/#{@rncto_name};
+			pwd;
+			ls -lst *#{@nodeb_name}*.mo*
+		}
+		puts
+		if @rxito_name =~ /^RXI/ then
+			puts "-- #{@rxito_name} - listing scripts".color(:magenta)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+				cd REFILIA*#{@nodeb_tx}/#{@rxito_name};
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo
+			}
+			puts
+		end
+	end
+	if a_activity == 'dualstack' then
+		if @rxi_name =~ /^RXI/ then
+			puts "-- #{@rxi_name} - listing scripts".color(:magenta)
+			system %{
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/#{@rxi_name};
+				pwd;
+				ls -lst *#{@nodeb_name}*.mo
+			}
+			puts
+		end
+	end
+end
+
+def get_scripts(a_activity)
+	if Dir["/cygdrive/x"].empty?
+		system %{net use 'x:' '\\\\EAMCS.ERICSSON.SE\\EBRSPDFS01\\group11\\RICC'}
+    end 
+#   @nodeb_name = @nodeb_name.split('_')[0] if @ricc_customer == 'VIVO'
+	if a_activity == 'fullip' then
+		if @nodeb_tx != 'IP' then
+			puts "-- #{@nodeb_name} - getting scripts".color(:green)
+			puts "-- from:".color(:green)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RBS";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*IP/RBS;
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RBS
+			}
+			puts "-- to:".color(:green)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RBS";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+			puts "-- #{@rnc_name} - getting scripts".color(:red)
+			puts "-- from:".color(:red)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RNC";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*IP/#{@rnc_name};
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RNC
+			}
+			puts "-- to:".color(:red)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RNC";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+		end	
+	end
+	if a_activity == 'dualstack' then
+		if @nodeb_tx != 'IP' then
+			puts "-- #{@nodeb_name} - getting scripts".color(:green)
+			puts "-- from:".color(:green)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RBS";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/RBS;
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RBS
+			}
+			puts "-- to:".color(:green)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RBS";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+			puts "-- #{@rnc_name} - getting scripts".color(:red)
+			puts "-- from:".color(:red)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RNC";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/#{@rnc_name};
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RNC
+			}
+			puts "-- to:".color(:red)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RNC";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+		end	
+	end
+	if a_activity == 'rehoming' then
+		puts "-- #{@nodeb_name} - getting scripts".color(:green)
+		puts "-- from:".color(:green)
+		system %{
+			mkdir -p "#{TODAY}/#{@nodeb_name}/RBS";
+			cd /cygdrive/x;
+			cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+			cd REFILIA*#{@nodeb_tx}/RBS;
+			pwd;
+			cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RBS
+		}
+		puts "-- to:".color(:green)
+		system %{
+			cd "#{TODAY}/#{@nodeb_name}/RBS";
+			pwd;
+			chmod 600 *;
+		}
+		puts
+		puts "-- #{@rnc_name} - getting scripts".color(:red)
+		puts "-- from:".color(:red)
+		system %{
+			mkdir -p "#{TODAY}/#{@nodeb_name}/RNC";
+			cd /cygdrive/x;
+			cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+			cd REFILIA*#{@nodeb_tx}/#{@rncto_name};
+			pwd;
+			cp -p *#{@nodeb_name}*.mo* #{TODAY}/#{@nodeb_name}/RNC
+		}
+		puts "-- to:".color(:red)
+		system %{
+			cd "#{TODAY}/#{@nodeb_name}/RNC";
+			pwd;
+			chmod 600 *;
+		}
+		puts
+		if @rxito_name =~ /^RXI/ then
+			puts "-- #{@rxito_name} - getting scripts".color(:magenta)
+			puts "-- from:".color(:magenta)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RXI";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rncto_name}";
+				cd REFILIA*#{@nodeb_tx}/#{@rxito_name};
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RXI
+			}
+			puts "-- to:".color(:magenta)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RXI";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+		end
+	end
+	if a_activity == 'dualstack' then
+		if @rxi_name =~ /^RXI/ then
+			puts "-- #{@rxi_name} - getting scripts".color(:magenta)
+			puts "-- from:".color(:magenta)
+			system %{
+				mkdir -p "#{TODAY}/#{@nodeb_name}/RXI";
+				cd /cygdrive/x;
+				cd "SCRIPTS/NOVO PADRAO/#{@ricc_customer}/#{@nodeb_region}/#{@rnc_name}";
+				cd MIGRA*STACK/#{@rxi_name};
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/#{@nodeb_name}/RXI
+			}
+			puts "-- to:".color(:magenta)
+			system %{
+				cd "#{TODAY}/#{@nodeb_name}/RXI";
+				pwd;
+				chmod 600 *;
+			}
+			puts
+		end
+	end
+end
+
+def set_scripts_workbook(a_site, a_activity)
+	puts "-- #{@a_site} - setting scripts".color(:yellow)
+    if a_activity == 'rehoming' then
+    	excel = WIN32OLE.new("excel.application")
+		rehoming =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+		input = rehoming.Worksheets("INPUT")
+		
+		r = 73
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RBS") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 73 if r == 82
+			end
+		end
+		
+		r = 134
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RNC") do |f|
+			if f =~ /\w+\.mo$/ or f =~ /\w+\.mos$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 134 if r == 140
+			end
+		end
+		
+		if @rxito_name =~ /^RXI/ then		
+			r = 181
+			Dir.foreach("#{TODAY}/#{@nodeb_name}/RXI") do |f|
+				if f =~ /\w+\.mo$/ then
+					r = r + 1
+					input.Range("a"+r.to_s)['Value'] = f 
+					r = 181 if r == 188
+				end
+			end
+		end
+		
+		rehoming.Save()
+		rehoming.Close()
+		excel.Quit()
+	end
+	if a_activity == 'fullip' and @nodeb_tx != 'IP' then
+    	excel = WIN32OLE.new("excel.application")
+		fullip =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+		input = fullip.Worksheets("INPUT")
+		
+		r = 71
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RBS") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f
+				r = 71 if r == 80
+			end
+		end
+		
+		r = 108
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RNC") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 108 if r == 112
+			end
+		end
+		
+		fullip.Save()
+		fullip.Close()
+		excel.Quit()
+	end
+	if a_activity == 'dualstack' then
+    	excel = WIN32OLE.new("excel.application")
+		dualstack =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+		input = dualstack.Worksheets("INPUT")
+		
+		r = 66
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RBS") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 66 if r == 75
+			end
+		end
+		
+		r = 102
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RNC") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 102 if r == 106
+			end
+		end
+		
+		r = 129
+		Dir.foreach("#{TODAY}/#{@nodeb_name}/RXI") do |f|
+			if f =~ /\w+\.mo$/ then
+				r = r + 1
+				input.Range("a"+r.to_s)['Value'] = f 
+				r = 129 if r == 136
+			end
+		end
+		
+		dualstack.Save()
+		dualstack.Close()
+		excel.Quit()
+	end
+end
+
+def ftp_scripts(a_activity)
+#	@nodeb_name = @nodeb_name.split('_')[0] if @ricc_customer == 'VIVO'
+	if a_activity == 'fullip' and @nodeb_tx == 'IP' then
+			else
+		puts "-- #{@nodeb_name} - copying scripts".color(:yellow)
+		system %{
+				mkdir -p #{TODAY}/SCRIPTS
+		}
+		puts
+		
+		puts "-- from:".color(:green)
+		system %{
+			cd #{TODAY}/#{@nodeb_name}/RBS;
+			pwd;
+			cp -p *#{@nodeb_name}*.mo #{TODAY}/SCRIPTS
+		}
+		puts "-- to:".color(:green)
+		system %{
+			cd #{TODAY}/SCRIPTS;
+			pwd
+		}
+		puts
+		
+		puts "-- from:".color(:green)		
+		system %{
+			cd #{TODAY}/#{@nodeb_name}/RNC;
+			pwd;
+			cp -p *#{@nodeb_name}*.mo #{TODAY}/SCRIPTS
+		}
+		puts "-- to:".color(:green)
+		system %{
+			cd #{TODAY}/SCRIPTS;
+			pwd;
+		}
+		puts
+	
+		if @rxito_name =~ /^RXI/ then
+			puts "-- from:".color(:green)	
+			system %{
+				cd #{TODAY}/#{@nodeb_name}/RXI;
+				pwd;
+				cp -p *#{@nodeb_name}*.mo #{TODAY}/SCRIPTS
+			}
+			puts "-- to:".color(:green)
+			system %{
+				cd #{TODAY}/SCRIPTS;
+				pwd;
+			}
+			puts	
+		end	
+	
+		system %{
+			cd #{TODAY}/SCRIPTS
+			pwd;
+			ls -la *#{@nodeb_name}*.mo
+		}
+		puts
+	end
+end
+
+desc "RICC ips new get from RICC scripts"
+task :ricc_ipsnewget do
+	puts "=> ricc_ipsnewget: getting ips new from ricc scripts...".bright
+	puts
+	load_ricc_data
+	if @ricc_activities == 'riccactivities' then
+    	puts "-- Error: #{@ricc_activities} not defined !".color(:red)
+    	puts
+    	exit
+	end
+	get_newips
+end
+
+def set_newips(a_site, a_newip)
+	@ricc_activities.each do |activity|
+		activity['sites'].each do |site| 
+			if site == a_site then
+				get_nodeb_data(site)
+				@nodeb_ipnew = a_newip
+				@ricc_sites_data.each do |nodeb|
+					if nodeb[site] != nil then
+						@ricc_sites_data.delete(nodeb)	
+					end
+				end
+				save_nodeb_data
+				save_ricc_data
+			end
+		end
+	end
+end
+
+def get_newips
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.mo$/ and File.basename(f) =~ /IPCHANGEALL.*[6|7]/ then
+			File.open(f, "r") do |file|
+				ipchanged = false
+				dschanged = false
+				nodeb = File.basename(f)[0..((File.basename(f) =~ /\_/)-1)]
+				get_nodeb_data(nodeb)
+  			    lines = file.readlines
+			    lines.each_index do |i|
+            		if lines[i].include? 'IpHostLink' then
+						ipchanged = true
+    				end
+    				if lines[i].include? 'EthernetLink' then
+						dschanged = true
+    				end
+    				if ipchanged == true then
+    					if lines[i] =~ /String\s*"(\d*\.\d*\.\d*\.d*\d*)"/ then
+    						newip = $1  						
+    						puts nodeb.color(:green) + " #{newip}"
+    						ipchanged = false
+    						set_newips(nodeb, newip)
+    					end
+    				end
+    				if dschanged == true and @nodeb_tx != "IP" then
+    					if lines[i] =~ /String\s*"(\d*\.\d*\.\d*\.d*\d*)"/ then
+    						newip = $1
+    						puts nodeb.color(:green) + " #{newip}"
+    						dschanged = false
+    						set_newips(nodeb, newip)
+    					end
+    				end
+    			end
+			end
+		end
+	end
+	puts
+end
+
+desc "RICC generate EXCEL Workbooks"
+task :ricc_genxls, [:a_sites, :a_activity] do |t, args|
+	puts "=> ricc_genxls: generationg Excel Worbooks...".bright
+	puts
+	args.with_defaults(:a_sites => "no_site", :a_activity => "fullip")
+	sites = args.a_sites
+	activity = args.a_activity.downcase
+	puts "-- files *.xls generated:".color(:yellow)
+	if sites != "no_site" then
+		sites = sites.split
+		sites.each do |site|
+			get_nodeb_data(site)
+#			prt_data(activity)
+			if activity == 'fullip'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_fullip.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_fullip(site)
+			elsif activity == 'dualstack'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_dualstack.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_dualstack(site)
+			elsif activity == 'rehoming'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_rehoming.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_rehoming(site)
+			else
+			end
+			system %{cd #{TODAY};ls -la "#{site}.xls"}
+		end
+	else
+		load_ricc_data	
+		@ricc_activities.each do |a| 
+    		sites = a['sites'] 
+    		activity = a['activity'].downcase
+    	
+			sites.each do |site|
+				get_nodeb_data(site)
+#				prt_data(activity)
+				if activity == 'fullip'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_fullip.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_fullip(site)
+				elsif activity == 'dualstack'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_dualstack.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_dualstack(site)
+				elsif activity == 'rehoming'
+					system %{cd "#{RICC_TEMPLATES}"; cp template_rehoming.xls "#{TODAY}/#{site}.xls"}
+					set_workbook_rehoming(site)
+				else
+				end
+				system %{cd #{TODAY};ls -la "#{site}.xls"}
+			end	
+		end	
+	end
+    puts
+end
+
+def get_nodeb_data(a_nodeb)
+	load_ricc_data
+	if @ricc_sites_data == 'riccsitesdata' or @ricc_sites_data == nil then
+		exit
+	end
+	
+	@ricc_sites_data.each do |nodeb|
+		if nodeb[a_nodeb] != nil then
+			nodeb_data = nodeb[a_nodeb]
+			@nodeb_name = nodeb_data['nodeb_name']
+			@nodeb_timestamp = nodeb_data['nodeb_timestamp']
+			@nodeb_region = nodeb_data['nodeb_region']
+			@nodeb_tx = nodeb_data['nodeb_tx']
+			@nodeb_ip = nodeb_data['nodeb_ip']
+			@nodeb_ipnew = nodeb_data['nodeb_ipnew']
+			@nodeb_model = nodeb_data['nodeb_model']
+			@nodeb_vid1 = nodeb_data['nodeb_vid1']
+			@nodeb_vid2 = nodeb_data['nodeb_vid2']
+			@nodeb_rbsid = nodeb_data['nodeb_rbsid']
+			@nodeb_defaultrouter1 = nodeb_data['nodeb_defaultrouter1']
+			@nodeb_defaultrouter2 = nodeb_data['nodeb_defaultrouter2']
+			@nodeb_hostet = nodeb_data['nodeb_hostet']
+
+			@rnc_name = nodeb_data['rnc_name']
+			@rnc_timestamp = nodeb_data['rnc_timestamp']
+			@rnc_nodebiub = nodeb_data['rnc_nodebiub']
+			@rnc_nodebutrancell = nodeb_data['rnc_nodebutrancell']
+			@rnc_hostets = nodeb_data['rnc_hostets']
+			@rnc_defaultrouter = nodeb_data['rnc_defaultrouter']
+			@rnc_hostet = nodeb_data['rnc_hostet']
+
+			@rncto_name = nodeb_data['rncto_name']
+			@rncto_timestamp = nodeb_data['rncto_timestamp']
+			@rncto_hostets = nodeb_data['rncto_hostets']
+			@rncto_defaultrouter = nodeb_data['rncto_defaultrouter']
+			@rncto_hostet = nodeb_data['rncto_hostet']
+
+			@rxi_name = nodeb_data['rxi_name']
+			@rxi_timestamp = nodeb_data['rxi_timestamp']
+			@rxi_atmport = nodeb_data['rxi_atmport']
+			@rxi_e1 = nodeb_data['rxi_e1']
+			@rxi_e2 = nodeb_data['rxi_e2']
+			@rxi_e3 = nodeb_data['rxi_e3']
+			@rxi_e4 = nodeb_data['rxi_e4']
+				
+			@rxito_name = nodeb_data['rxito_name']
+			@rxito_timestamp = nodeb_data['rxito_timestamp']		
+		end
+	end
+end	
+
+def save_nodeb_data
+	nodeb_data = {
+		'nodeb_name'   => @nodeb_name,
+		'nodeb_timestamp' => @nodeb_timestamp,
+		'nodeb_tx'     => @nodeb_tx,
+		'nodeb_region' => @nodeb_region,
+		'nodeb_ip'     => @nodeb_ip,
+		'nodeb_ipnew'  => @nodeb_ipnew,
+		'nodeb_model'  => @nodeb_model,
+		'nodeb_vid1'   => @nodeb_vid1,
+		'nodeb_vid2'   => @nodeb_vid2,
+		'nodeb_rbsid'  => @nodeb_rbsid,
+		'nodeb_defaultrouter1' => @nodeb_defaultrouter1,
+		'nodeb_defaultrouter2' => @nodeb_defaultrouter2,
+		'nodeb_hostet'      => @nodeb_hostet,
+		
+		'rnc_name'           => @rnc_name,
+		'rnc_timestamp' => @rnc_timestamp,
+		'rnc_nodebiub'       => @rnc_nodebiub,
+		'rnc_nodebutrancell' => @rnc_nodebutrancell,
+		'rnc_hostets'        => @rnc_hostets,
+		'rnc_defaultrouter'  => @rnc_defaultrouter,
+		'rnc_hostet'         => @rnc_hostet,
+		
+		'rncto_name'          => @rncto_name,
+		'rncto_timestamp' => @rncto_timestamp,
+		'rncto_hostets'       => @rncto_hostets,	
+		'rncto_defaultrouter' => @rncto_defaultrouter,
+		'rncto_hostet'        => @rncto_hostet,
+		
+		'rxi_name'     => @rxi_name,
+		'rxi_timestamp' => @rxi_timestamp,
+		'rxi_atmport'  => @rxi_atmport,
+		'rxi_e1'       => @rxi_e1,
+		'rxi_e2'       => @rxi_e2,
+		'rxi_e3'       => @rxi_e3,
+		'rxi_e4'       => @rxi_e4,
+		
+		'rxito_name'   => @rxito_name,
+		'rxito_timestamp' => @rxito_timestamp	
+	}
+
+	@ricc_sites_data << {@nodeb_name => nodeb_data}
+end	
+
+def set_workbook_fullip(a_site)
+    excel = WIN32OLE.new("excel.application")
+#	excel['Visible'] = TRUE
+	fullip =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+	input = fullip.Worksheets("INPUT")
+	input.Range("a23")['Value']  = @nodeb_name
+	input.Range("e23")['Value']  = @nodeb_ip
+	input.Range("f23")['Value']  = @nodeb_ipnew
+	input.Range("c23")['Value']  = @rnc_name
+	input.Range("d23")['Value']  = @rxi_name
+
+	input.Range("a25")['Value']  = @nodeb_region
+	input.Range("a27")['Value']  = @ricc_customer
+	
+	input.Range("a164")['Value'] = @nodeb_model
+	input.Range("a166")['Value'] = @nodeb_vid1
+	input.Range("a168")['Value'] = @nodeb_vid2
+	input.Range("a170")['Value'] = @nodeb_rbsid
+	input.Range("a183")['Value'] = @nodeb_defaultrouter1
+	input.Range("a185")['Value'] = @nodeb_defaultrouter2
+	input.Range("a187")['Value'] = @nodeb_hostet
+	
+	input.Range("a196")['Value'] = @rnc_nodebiub
+	input.Range("a198")['Value'] = @rnc_nodebutrancell
+	input.Range("a204")['Value'] = @rnc_hostets
+	input.Range("a217")['Value'] = @rnc_defaultrouter
+	input.Range("a219")['Value'] = @rnc_hostet
+	
+	input.Range("a229")['Value'] = @rxi_atmport
+	input.Range("a235")['Value'] = @rxi_e1
+	input.Range("a237")['Value'] = @rxi_e2
+	input.Range("a239")['Value'] = @rxi_e3
+	input.Range("a241")['Value'] = @rxi_e4
+	
+	fullip.Save()
+	fullip.Close()
+	excel.Quit()
+end
+
+def set_workbook_dualstack(a_site)
+    excel = WIN32OLE.new("excel.application")
+#	excel['Visible'] = TRUE
+	fullip =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+	input = fullip.Worksheets("INPUT")
+	input.Range("a23")['Value']  = @nodeb_name
+	input.Range("i23")['Value']  = @nodeb_ip
+	input.Range("j23")['Value']  = @nodeb_ipnew
+	input.Range("m23")['Value']  = @rnc_name
+	input.Range("l23")['Value']  = @rxi_name
+
+	input.Range("b23")['Value']  = @nodeb_region
+	input.Range("a25")['Value']  = @ricc_customer
+	
+	input.Range("a161")['Value'] = @nodeb_model
+	input.Range("a163")['Value'] = @nodeb_vid1
+	input.Range("a165")['Value'] = @nodeb_rbsid
+	input.Range("a167")['Value'] = @nodeb_defaultrouter1
+	input.Range("a169")['Value'] = @nodeb_hostet
+	
+	input.Range("a178")['Value'] = @rnc_nodebiub
+	input.Range("a180")['Value'] = @rnc_nodebutrancell
+	input.Range("a186")['Value'] = @rnc_hostets
+	input.Range("a199")['Value'] = @rnc_defaultrouter
+	input.Range("a201")['Value'] = @rnc_hostet
+	
+	input.Range("a211")['Value'] = @rxi_atmport
+	input.Range("a217")['Value'] = @rxi_e1
+	input.Range("a219")['Value'] = @rxi_e2
+	input.Range("a221")['Value'] = @rxi_e3
+	input.Range("a223")['Value'] = @rxi_e4
+	
+	fullip.Save()
+	fullip.Close()
+	excel.Quit()
+end
+
+def set_workbook_rehoming(a_site)
+    excel = WIN32OLE.new("excel.application")
+#	excel['Visible'] = TRUE
+	fullip =  excel.Workbooks.Open("C:\\Users\\eronogu\\Documents\\Projects_RICC\\TODAY\\#{a_site}.xls")
+	input = fullip.Worksheets("INPUT")
+	input.Range("g23")['Value']  = @nodeb_name
+	input.Range("a23")['Value']  = @nodeb_tx
+	input.Range("m23")['Value']  = @nodeb_ip
+	 
+	if @nodeb_ipnew =~ /^\</ then
+		input.Range("n23")['Value']  = @nodeb_ip 
+	else
+		input.Range("n23")['Value']  = @nodeb_ipnew
+	end
+
+	input.Range("i23")['Value']  = @rnc_name
+	input.Range("k23")['Value']  = @rxi_name
+
+	input.Range("j23")['Value']  = @rncto_name
+	input.Range("l23")['Value']  = @rxito_name
+
+	input.Range("a27")['Value']  = @nodeb_region
+	input.Range("a29")['Value']  = @ricc_customer
+	
+	input.Range("a255")['Value'] = @nodeb_model
+	input.Range("a257")['Value'] = @nodeb_vid1
+	input.Range("a259")['Value'] = @nodeb_vid2
+	input.Range("a261")['Value'] = @nodeb_rbsid
+	input.Range("a274")['Value'] = @nodeb_defaultrouter1
+	input.Range("a276")['Value'] = @nodeb_defaultrouter2
+	input.Range("a278")['Value'] = @nodeb_hostet
+	
+	input.Range("a290")['Value'] = @nodeb_model
+	input.Range("a292")['Value'] = @nodeb_vid1
+	input.Range("a294")['Value'] = @nodeb_vid2
+	input.Range("a296")['Value'] = @nodeb_rbsid
+	input.Range("a309")['Value'] = @nodeb_defaultrouter1
+	input.Range("a311")['Value'] = @nodeb_defaultrouter2
+	input.Range("a313")['Value'] = @nodeb_hostet
+	
+	input.Range("a361")['Value'] = @rnc_nodebiub
+	input.Range("a363")['Value'] = @rnc_nodebutrancell
+	input.Range("a369")['Value'] = @rnc_hostets
+	input.Range("a382")['Value'] = @rnc_defaultrouter
+	input.Range("a384")['Value'] = @rnc_hostet
+
+	input.Range("a400")['Value'] = @rnc_nodebiub
+	input.Range("a402")['Value'] = @rnc_nodebutrancell
+	input.Range("a408")['Value'] = @rncto_hostets
+	input.Range("a421")['Value'] = @rncto_defaultrouter
+	input.Range("a423")['Value'] = @rncto_hostet
+	
+	input.Range("a460")['Value'] = @rxi_atmport
+	input.Range("a466")['Value'] = @rxi_e1
+	input.Range("a468")['Value'] = @rxi_e2
+	input.Range("a470")['Value'] = @rxi_e3
+	input.Range("a472")['Value'] = @rxi_e4
+	
+	fullip.Save()
+	fullip.Close()
+	excel.Quit()
+end
+
+desc "RICC printint RICC data"
+task :ricc_print do
+	puts "Copyright (C) 2012~2015 by Ericsson, RICC Brazil, RLAM.".color(:cyan)
+  	puts "by Roberto Nogueira - PA81".color(:cyan)
+  	puts
+  	puts "Use: by using rake tasks: rake --tasks"
+  	puts
+	load_ricc_data
+	puts "=> ricc_print: printing ricc data...".bright
+	puts
+   	print "START    : ".color(:cyan);puts @ricc_start
+   	print "STOP     : ".color(:cyan);puts @ricc_stop
+   	print "SITE     : ".color(:cyan);puts @ricc_site.color(:green)
+   	print "ACTIVITY : ".color(:cyan);puts @ricc_activity.color(:green)
+   	print "CUSTOMER : ".color(:cyan);puts @ricc_customer.color(:green)
+   	print "IUBLINK  : ".color(:cyan);puts @ricc_iublink.color(:green)
+   	print "CELLNAMES: ".color(:cyan);puts @ricc_cellnames.color(:green)
+   	print "RICCNAME : ".color(:cyan);puts @ricc_name.color(:red).bright
+   	puts
+   	puts  "ACTIVITIES: ".color(:cyan)
+   	if @ricc_activities.class == Array and @ricc_activities != nil then
+    	@ricc_activities.each  do |a| 
+    		puts (a['sites'].join(',') + " - #{a['activity']}").color(:yellow).underline if a != nil
+    	end 
+	elsif @ricc_activities.class == String then
+		puts @ricc_activities.color(:yellow)
+		exit
+	end
+   	puts
+   	@ricc_activities.each do |a| 
+    	sites = a['sites'] 
+    	activity = a['activity'].downcase
+    	if activity != 'rehoming' then
+ 			puts "TIMESTAMP   TX  NODEB    REGION MODEL   IP OLD          IP NEW          VID1 VID2 RBSID DEFAULTROUTER1  DEFAULTROUTER2  HOSTET          RNC     RXI     ".underline.color(:cyan)
+ 		else
+ 			puts "TIMESTAMP   TX  NODEB    REGION MODEL   IP OLD          IP NEW          VID1 VID2 RBSID DEFAULTROUTER1  DEFAULTROUTER2  HOSTET          RNC     RNCTO   RXI     RXITO   ".underline.color(:cyan)
+ 		end   
+		sites.each do |site|
+			get_nodeb_data(site)
+			@nodeb_tx    = "---" if @nodeb_tx =~ /^\</ 
+			@nodeb_name  = "--------" if @nodeb_name =~ /^\</ 
+			@nodeb_region  = "------" if @nodeb_region =~ /^\</ 
+			@nodeb_model = "-------" if @nodeb_model =~ /^\</ 
+			@nodeb_ip    = "---------------" if @nodeb_ip =~ /^\</ 
+			@nodeb_ipnew = "---------------" if @nodeb_ipnew =~ /^\</ 
+			@nodeb_vid1  = "----" if @nodeb_vid1 =~ /^\</ 
+			@nodeb_vid2  = "----" if @nodeb_vid2 =~ /^\</ 
+			@nodeb_rbsid = "-----" if @nodeb_rbsid =~ /^\</ 
+			@nodeb_defaultrouter1  = "---------------" if @nodeb_defaultrouter1 =~ /^\</ 
+			@nodeb_defaultrouter2  = "---------------" if @nodeb_defaultrouter2 =~ /^\</ 
+			@nodeb_hostet          = "---------------" if @nodeb_hostet =~ /^\</ 
+			@rnc_name    = "-------" if @rnc_name =~ /^\</ 
+			@rxi_name    = "-------" if @rxi_name =~ /^\</ 
+			@rncto_name  = "-------" if @rncto_name =~ /^\</ 
+			@rxito_name  = "-------" if @rxito_name =~ /^\</
+			print "#{@nodeb_timestamp}".ljust(12)
+			case @nodeb_tx
+			when 'ATM' then print "#{@nodeb_tx}".ljust(4).color(:yellow)
+			when 'DS'  then print "#{@nodeb_tx}".ljust(4).color(:white)
+			when 'IP'  then print "#{@nodeb_tx}".ljust(4).color(:blue)
+			else
+			end
+			print "#{@nodeb_name}".ljust(9).color(:green)
+			print "#{@nodeb_region}".ljust(7).color(:green)
+			print "#{@nodeb_model}".ljust(8).color(:green)
+			print "#{@nodeb_ip}".ljust(16).color(:green)
+			print "#{@nodeb_ipnew}".ljust(16).color(:green)
+			print "#{@nodeb_vid1}".ljust(5).color(:green)
+			print "#{@nodeb_vid2}".ljust(5).color(:green)
+			print "#{@nodeb_rbsid}".ljust(6).color(:green)
+			print "#{@nodeb_defaultrouter1}".ljust(16).color(:green)
+			print "#{@nodeb_defaultrouter2}".ljust(16).color(:green)
+			print "#{@nodeb_hostet}".ljust(16).color(:green)
+			print "#{@rnc_name}".ljust(8).color(:red)
+			if activity == 'rehoming' then
+    			print "#{@rncto_name}".ljust(8).color(:red)
+    		end
+			print "#{@rxi_name}".ljust(8).color(:magenta)
+    		if activity == 'rehoming' then
+				print "#{@rxito_name}".ljust(8).color(:magenta)
+    		end
+			puts
+		end	
+	end
+	puts
+end
+	
+desc "RICC printint RICC nodeb data"
+task :ricc_print_nodeb, [:a_sites] do |t, args|
+	args.with_defaults(:a_sites => "all_sites")
+	sites = args.a_sites
+	puts "=> ricc_print_nodeb: printing ricc nodeb data...".bright
+	puts
+	load_ricc_data
+	if sites == "all_sites" then
+   		@ricc_activities.each do |a| 
+    		sites = a['sites'] 
+    		activity = a['activity'].downcase
+    	
+			sites.each do |site|
+				get_nodeb_data(site)
+				prt_data(activity)
+			end	
+			
+		end
+	else
+		sites = sites.split
+		sites.each do |site|
+			@ricc_activities.each do |a| 
+				if a['sites'].include? site then
+					activity = a['activity'].downcase
+					get_nodeb_data(site)
+					prt_data(activity)
+				end
+			end
+		end			
+	end
+   	puts
+end
+
+def get_timestamp
+	t = DateTime.now
+	t.strftime("%Y%m%d_%H%M")
+end
+
+def get_ricc_name
+	@ricc_name = [] 
+	@ricc_name << @ricc_start
+	@ricc_name << @ricc_site
+	@ricc_name << @ricc_activity
+	@ricc_name << '-'
+	@ricc_name << @ricc_customer
+	@ricc_name = @ricc_name.join('_')
+end
+
+desc "RICC term  for TODAY directory"
+task :ricc_term  => [:ricc_print, :ricc_strt, :ricc_logsget, :ricc_logstoricc, :ricc_cloud_to, :ricc_archive] do
+	puts "=> ricc_term: terminating TODAY directory...".bright
+	puts
+end
+
+desc "RICC stop  for TODAY directory"
+task :ricc_stop  do
+	puts "=> ricc_stop: stopping TODAY directory...".bright
+	puts
+	load_ricc_data
+	@ricc_stop = get_timestamp
+	get_ricc_name
+	save_ricc_data
+	cmdslistd_to_ricc
+	puts "-- ricc file generated:".color(:yellow)
+    system %{ls -la "#{TODAY}" | egrep "*ricc$"}
+    puts
+    if File.exist?("#{CLOUD}/Rakefile")
+		system %{rm -f "#{CLOUD}/Rakefile"}
+    end 
+	system %{cd "#{TODAY}";cp -p "#{RICC_PATH}/Rakefile" "#{CLOUD}"}
+	puts "-- listing Rakefile in #{CLOUD} directory:".color(:yellow)
+    system %{cd "#{CLOUD}"; ls -la | grep Rakefile}
+	puts
+end
+
+desc "RICC archive         for TODAY directory"
+task :ricc_archive  do
+	puts "=> ricc_archive: archiving TODAY directory...".bright
+	puts
+	load_ricc_data
+    get_ricc_name
+	system %{cd "#{RICC_ARCHIVE}";mkdir "#{@ricc_name}"}
+    system %{cd "#{TODAY}";mv * "#{RICC_ARCHIVE}/#{@ricc_name}"}
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+	puts
+	puts "-- listing ARCHIVE directory...".color(:yellow)
+    system %{cd "#{RICC_ARCHIVE}";ls -dl #{@ricc_name}}
+    puts
+end
+
+desc "RICC archive zip     for TODAY directory"
+task :ricc_archive_zip  do
+	puts "=> ricc_archive_zip: archiving TODAY directory...".bright
+	puts
+	load_ricc_data
+    get_ricc_name
+	system %{cd #{TODAY};zip -r #{@ricc_name}.zip *}
+    system %{cd #{TODAY};mv #{@ricc_name}.zip #{RICC_ARCHIVE}}
+    system %{cd #{TODAY};rm -rf *}
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la #{TODAY}}
+	puts
+	puts "-- listing ARCHIVE directory...".color(:yellow)
+    system %{cd #{RICC_ARCHIVE};ls -l #{@ricc_name}.zip}
+    puts
+end
+
+desc "RICC archive fallback to TODAY directory"
+task :ricc_archive_fallback, [:a_riccname] do |t, args|
+	puts "=> ricc_archive_fallback: fallback to TODAY directory...".bright
+	puts
+	args.with_defaults(:a_riccname => "riccname")
+	@ricc_name = args.a_riccname
+    if @ricc_name == "riccname" then
+    	puts "-- listing ARCHIVE directory...".color(:yellow)
+    	puts
+    	system %{cd "#{RICC_ARCHIVE}";ls -la;cd "#{TODAY}"}
+    	puts "-- riccname is required.".color(:yellow)
+		puts
+    	exit
+    end
+   if Dir["#{RICC_ARCHIVE}/#{@ricc_name}"].empty?
+    	puts "-- Directory: #{RICC_ARCHIVE}/#{@ricc_name} do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+    save_ricc_data
+	load_ricc_data
+	system %{cd "#{RICC_ARCHIVE}/#{@ricc_name}";mv * "#{TODAY}";cd ..;rm -rf "#{RICC_ARCHIVE}/#{@ricc_name}"}
+	load_ricc_data
+	get_ricc_name
+    save_ricc_data	
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+	puts
+end
+
+desc "RICC archive copy     to TODAY directory"
+task :ricc_archive_copy, [:a_riccname] do |t, args|
+	puts "=> ricc_archive_copy: copying to TODAY directory...".bright
+	puts
+	args.with_defaults(:a_riccname => "riccname")
+	@ricc_name = args.a_riccname
+    if @ricc_name == "riccname" then
+    	puts "-- listing ARCHIVE directory...".color(:yellow)
+    	puts
+    	system %{cd "#{RICC_ARCHIVE}";ls -la;cd "#{TODAY}"}
+    	puts "-- riccname is required.".color(:yellow)
+		puts
+    	exit
+    end
+    if Dir["#{RICC_ARCHIVE}/#{@ricc_name}"].empty?
+    	puts "-- Directory: #{RICC_ARCHIVE}/#{@ricc_name} do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+    save_ricc_data
+	load_ricc_data
+	system %{cd "#{RICC_ARCHIVE}/#{@ricc_name}";cp -r * "#{TODAY}"}
+	load_ricc_data
+	get_ricc_name
+    save_ricc_data	
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+	puts
+end
+
+desc "RICC archive copy dmp to TODAY directory"
+task :ricc_archive_copy_dmps, [:a_riccname, :a_kget] do |t, args|
+	puts "=> ricc_archive_copy_dmps: copying to TODAY directory...".bright
+	puts
+	args.with_defaults(:a_riccname => "riccname", :a_kget => "kgetall_before")
+	load_ricc_data
+	@ricc_name = args.a_riccname
+	@ricc_kget = args.a_kget
+    if @ricc_name == "riccname" then
+    	puts "-- listing ARCHIVE directory...".color(:yellow)
+    	puts
+    	system %{cd "#{RICC_ARCHIVE}";ls -la;cd "#{TODAY}"}
+    	puts "-- riccname is required.".color(:yellow)
+		puts
+    	exit
+    end
+    if Dir["#{RICC_ARCHIVE}/#{@ricc_name}"].empty?
+    	puts "-- Directory: #{RICC_ARCHIVE}/#{@ricc_name} do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+    save_ricc_data
+	@dmps = get_dmps(@ricc_name, @ricc_kget)
+	puts "-- copying to TODAY:".color(:yellow)
+	@dmps.each do |dmp| 
+		puts "#{dmp}"
+		system %{cd "#{TODAY}";cp "#{dmp}" .} 
+	end
+	puts
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+	puts
+end
+
+desc "RICC logs to  RICC drive"
+task :ricc_logstoricc  do 
+	puts "=> ricc_logstoricc: copying logs to RICC  drive...".bright
+	puts
+    puts "-- contents of TODAY log files:".color(:yellow)
+    system %{cd "#{TODAY}";
+    	pwd;
+    	ls -la *.txt 	
+	}
+    puts
+    if Dir["/cygdrive/x"].empty?
+		system %{net use 'x:' '\\\\EAMCS.ERICSSON.SE\\EBRSPDFS01\\group11\\RICC'}
+    end 
+	system %{cd /cygdrive/x/;cd PROCESSOS_RICC/JANELA_DE_*/LOGS; cp -p "#{TODAY}"/*.txt .}
+    puts "-- contents of RICC drive:".color(:yellow)
+    system %{cd /cygdrive/x/;cd PROCESSOS_RICC/JANELA_DE_*/LOGS;
+		pwd
+	}
+    @log_names = get_lognames
+    @log_names.each do |log|
+		system %{cd /cygdrive/x/;cd PROCESSOS_RICC/JANELA_DE_*/LOGS;
+		ls -la "#{log}"
+		}
+	end
+    puts
+end
+
+desc "RICC copy to   CLOUD directory"
+task :ricc_cloud_to, [:a_riccname] do |t, args|
+	puts "=> ricc_cloud_to: copying to CLOUD directory...".bright
+	puts
+	args.with_defaults(:a_riccname => "TODAY")
+	@ricc_name = args.a_riccname
+    if !Dir["#{CLOUD}/#{@ricc_name}"].empty?
+		system %{rm -rf "#{CLOUD}/#{@ricc_name}"}
+    end 
+    if File.exist?("#{CLOUD}/Rakefile")
+		system %{rm -f "#{CLOUD}/Rakefile"}
+    end 
+	system %{mkdir -p "#{CLOUD}/#{@ricc_name}";cd "#{TODAY}"; cp -r * "#{CLOUD}/#{@ricc_name}"}
+	system %{cd "#{TODAY}";cp -p "#{RICC_PATH}/Rakefile" "#{CLOUD}"}
+    puts "-- contents of #{CLOUD} directory:".color(:yellow)
+    system %{cd "#{CLOUD}/#{@ricc_name}";ls -la}
+    puts
+    puts "-- listing Rakefile in #{RICC_PATH} directory:".color(:yellow)
+    system %{ls -la "#{RICC_PATH}/Rakefile"}
+	puts
+    puts "-- listing Rakefile in #{CLOUD} directory:".color(:yellow)
+    system %{cd "#{CLOUD}"; ls -la | grep Rakefile}
+	puts
+end
+
+desc "RICC backup to CLOUD directory"
+task :ricc_backup do 
+	puts "=> ricc_backup: backing up to CLOUD directory...".bright
+	puts
+	system %{cp -r #{RICC_PATH}/RICC_Templates "#{CLOUD}"}
+	system %{cp -r #{RICC_PATH}/RICC_TemplatesLogs "#{CLOUD}"}
+	system %{cp -p #{RICC_PATH}/Rakefile "#{CLOUD}"}
+    puts "-- contents of #{CLOUD} directory:".color(:yellow)
+    system %{ls -la "#{CLOUD}"}
+    puts
+    puts "-- listing Rakefile in #{RICC_PATH} directory:".color(:yellow)
+    system %{ls -la #{RICC_PATH}/Rakefile}
+	puts
+    puts "-- listing Rakefile in #{CLOUD} directory:".color(:yellow)
+    system %{ls -la "#{CLOUD}/Rakefile"}
+	puts
+end
+
+desc "RICC copy from CLOUD directory"
+task :ricc_cloud_from, [:a_riccname] do |t, args|
+	puts "=> ricc_cloud_from: copying from CLOUD directory...".bright
+	puts
+	args.with_defaults(:a_riccname => "TODAY")
+	@ricc_name = args.a_riccname
+    if Dir["#{CLOUD}/#{@ricc_name}"].empty?
+    	puts "-- Directory: #{CLOUD}/#{@ricc_name} do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+    if !File.exist?("#{CLOUD}/Rakefile")
+    	puts "-- File: #{CLOUD}/Rakefile do not exist !".color(:red)
+    	puts
+    	exit
+    end 
+	system %{cd "#{CLOUD}/#{@ricc_name}";cp -r * "#{TODAY}"}
+	system %{cd "#{CLOUD}";cp -p Rakefile "#{RICC_PATH}"}
+    puts "-- contents of #{TODAY} directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+    puts
+    puts "-- listing Rakefile in #{CLOUD} directory:".color(:yellow)
+    system %{ls -la "#{CLOUD}/Rakefile"}
+	puts
+    puts "-- listing Rakefile in #{RICC_PATH} directory:".color(:yellow)
+    system %{ls -la "#{RICC_PATH}/Rakefile"}
+	puts
+end
+
+desc "RICC cmdslist from logs"
+task :ricc_cmdslist, [:a_site] do |t, args|
+	puts "=> ricc_cmdlist: generationg cmdlist for the logs...".bright
+	puts
+	args.with_defaults(:a_site => "")
+	site = args.a_site
+	cmdslist(site)
+	puts
+end
+
+def cmdslist(a_site)
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	lines[i]=lines[i].gsub(">>>","   ")
+            		if lines[i] =~ CMD_REGEX and lines[i].include? a_site then
+    					puts lines[i].chop					
+    				end
+    			end
+    		end
+    	end
+	end
+end
+
+desc "RICC cmdslist details from logs"
+task :ricc_cmdslistd, [:a_site] do |t, args|
+	puts "=> ricc_cmdlistd: generating cmdlist detailed for the logs...".bright
+	puts
+	args.with_defaults(:a_site => "")
+	site = args.a_site
+	cmdslistd(site)
+	puts
+end
+
+def cmdslistd
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				first_time = true
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	lines[i]=lines[i].gsub(">>>","   ")
+			    	lines[i]=lines[i].gsub("{","(")
+			    	lines[i]=lines[i].gsub("}",")")
+			    	if lines[i+1] != nil then
+			    		lines[i+1]=lines[i+1].gsub(">>>","   ")
+			    		lines[i+1]=lines[i+1].gsub("{","(")
+			    	    lines[i+1]=lines[i+1].gsub("}",")")
+			    		if lines[i] =~ CMD_REGEX then
+			    			if  lines[i+1] =~ CMD_REGEX then 
+			    				puts lines[i].chop
+			    			else
+    							puts lines[i].chop
+    							puts "{".color(:cyan)
+            					puts "/*".color(:cyan)
+            				end
+            			else
+            				if  lines[i+1] =~ CMD_REGEX then 
+			    				puts lines[i].chop.color(:cyan)
+    							puts "*/".color(:cyan)
+            					puts "}".color(:cyan)
+			    			else
+			    				if first_time then
+			    					first_time = false
+									puts "{".color(:cyan)
+									puts "/*".color(:cyan)
+								end
+    							puts lines[i].chop.color(:cyan)
+            				end
+            			
+						end
+					else
+			    		if lines[i] =~ CMD_REGEX then
+			    			puts lines[i].chop
+			    		else
+    						puts lines[i].chop.color(:cyan)
+    						puts "*/".color(:cyan)
+            				puts "}".color(:cyan)
+						end
+					end
+    			end
+    		end
+    	end
+	end
+end
+
+desc "RICC cmdslist details from logs to ricc file"
+task :ricc_cmdslistd_to_ricc do
+	load_ricc_data
+	get_ricc_name
+	cmdslistd_to_ricc
+end
+
+def cmdslistd_to_ricc
+	File.open("#{TODAY}/#{@ricc_name}.ricc", "w") do |riccfile|
+		Find.find("#{TODAY}") do |f|
+			if File.basename(f) =~ /\.log/
+ 				@log_file = f
+				File.open(@log_file, "r") do |file|
+					first_time = true
+				    lines = file.readlines
+				    lines.each_index do |i|
+			    		lines[i]=lines[i].gsub(">>>","   ")
+			    		lines[i]=lines[i].gsub("{","(")
+			    		lines[i]=lines[i].gsub("}",")")
+				    	if lines[i+1] != nil then
+			    			lines[i+1]=lines[i+1].gsub(">>>","   ")
+			    			lines[i+1]=lines[i+1].gsub("{","(")
+			    	    	lines[i+1]=lines[i+1].gsub("}",")")
+				    		if lines[i] =~ CMD_REGEX then
+				    			if  lines[i+1] =~ CMD_REGEX then 
+				    				riccfile.puts lines[i].chop
+				    			else
+    								riccfile.puts lines[i].chop
+    								riccfile.puts "{"
+            						riccfile.puts "/*"
+            					end
+            				else
+            					if  lines[i+1] =~ CMD_REGEX then 
+				    				riccfile.puts lines[i].chop
+    								riccfile.puts "*/"
+            						riccfile.puts "}"
+				    			else
+				    				if first_time then
+				    					first_time = false
+										riccfile.puts "{"
+										riccfile.puts "/*"
+									end
+    								riccfile.puts lines[i].chop
+            					end
+            				
+							end
+						else
+				    		if lines[i] =~ CMD_REGEX then
+				    			riccfile.puts lines[i].chop
+				    		else
+    							riccfile.puts lines[i].chop
+    							riccfile.puts "*/"
+            					riccfile.puts "}"
+							end
+						end
+    				end
+    			end
+			end
+    	end
+	end
+end
+
+def cmdget(a_cmd)
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX and lines[i].include? "#{a_cmd}" then
+            				cmd_found = true
+            				result << lines[i].chop		
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						return result
+    						break
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+end
+
+def cmdgetif(a_cmd, a_site)
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX and lines[i].include? "#{a_cmd}" then
+            				cmd_found = true
+            				result << lines[i].chop	
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						result.each_index do |r|
+    							if result[r].include? "#{a_site}" then
+    								return result
+    								break
+    							end
+							end
+							result=[]
+							cmd_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+end
+
+def cmdattr(a_cmd, a_regex)
+	cmd = cmdget(a_cmd)
+	if cmd != nil then
+		cmd.each do |cmdline|
+			if cmdline =~ a_regex then
+				return $1
+				break
+			end 
+	    end
+	    return nil
+	end
+end
+
+def cmdattrif(a_cmd, a_regex, a_site)
+	cmd = cmdgetif_new(a_cmd, a_site)
+	if cmd != nil then
+		cmd.each do |cmdline|
+			if cmdline =~ a_regex then
+				return $1
+				break
+			end 
+	    end
+	    return nil
+	end
+end
+
+def cmdgetif_new(a_cmd, a_site)
+	cmds = cmdgetifs3(a_site, a_cmd)
+	@cmdts_bef = nil
+	@cmd = nil
+	cmds.each do |cmd|
+		cmd.each do |line|
+			if line =~ /^\$\w+\_timestamp\s=\s(\w+)$/ then
+				if @cmdts_bef == nil then 
+					@cmdts_bef = $1
+					@cmd = cmd
+					@cmdts_bef = "20"+ @cmdts_bef.split('_')[0]+ @cmdts_bef.split('_')[1]
+    				@cmdts_bef = DateTime.parse(@cmdts_bef).to_local_time 
+				else
+					@cmdts_cur = $1
+					@cmdts_cur = "20"+ @cmdts_cur.split('_')[0]+ @cmdts_cur.split('_')[1]
+    				@cmdts_cur = DateTime.parse(@cmdts_cur).to_local_time
+    				if @cmdts_cur > @cmdts_bef then
+    					@cmd = cmd
+    				end
+				end					
+			end
+		end
+	end
+	return @cmd
+end
+
+def cmdinclude(a_cmd, a_include)
+	cmd = cmdget(a_cmd)
+	if cmd != nil then
+		cmd.each do |cmdline|
+			if cmdline.include? a_include then
+				return cmdline
+				break
+			end 
+	    end
+	end
+end
+
+desc "RICC generate call tests template for all sectors"
+task :ricc_gencalltests do
+	load_ricc_data
+    gen_calltests
+end
+
+def gen_calltests
+	cellnames = @ricc_cellnames.split('-')
+	ricc_sectors  = cellnames[1].split('/').map {|s| cellnames[0] + s}
+	puts "+++ RICC +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++".color(:cyan)
+	puts "+++ TESTES DE CHAMADAS - DEPOIS ++++++++++++++++++++++++++++++++++++++++".color(:cyan)
+	puts
+	puts "uer -i <imsi>"
+	puts "uer -c #{cellnames[0]}(#{cellnames[1].split('/').join('|')})"
+	puts
+	puts "lget utrancell cellid <cellid>"
+	puts
+	puts "lst (#{@ricc_iublink}|#{cellnames[0]})"
+	puts "lbl #{cellnames[0]}"
+	puts
+	ricc_sectors.each do |sector|
+		puts "! #{sector}".color(:yellow)
+		puts "{"
+		puts "ldeb #{sector}"
+		puts "lbl  #{sector}"
+		puts
+		puts "## Voz   #{sector}".color(:blue)
+		puts "{"
+		puts "}"
+		puts 
+		puts "## Video #{sector}".color(:blue)
+		puts "{"
+		puts "}"
+		puts
+		puts "## Dados #{sector} <velocidade> kbps".color(:blue)
+		puts "{"
+		puts "}"
+	    puts
+	    puts
+	    puts "}"
+	end
+end
+
+desc "RICC generate call test template for all sectors"
+task :ricc_gencalltest do
+	load_ricc_data
+    gen_calltest
+end
+
+def gen_calltest
+	cellnames = @ricc_cellnames.split('-')
+	ricc_sectors  = cellnames[1].split('/').map {|s| cellnames[0] + s}
+	puts "+++ RICC +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++".color(:cyan)
+	puts "+++ TESTES DE CHAMADAS - ANTES +++++++++++++++++++++++++++++++++++++++++".color(:cyan)
+	puts "@@ SAVE AS: #{@ricc_site}_calltests.ricc".color(:green)
+	puts
+	puts "uer -i <imsi>"
+	puts "uer -c #{cellnames[0]}(#{cellnames[1].split('/').join('|')})"
+	puts
+	puts "lget utrancell cellid <cellid>"
+	puts
+	puts "lst (#{@ricc_iublink}|#{cellnames[0]})"
+	puts "ldeb #{cellnames[0]}"
+	puts
+	puts
+	puts "! #{@ricc_cellnames}".color(:yellow)
+	puts "## Voz  ".color(:blue)
+	puts "{"
+	puts "}"
+	puts
+	puts "## Video".color(:blue)
+	puts "{"
+	puts "}"
+	puts 
+	puts "## Dados <velocidade> kbps".color(:blue)
+	puts "{"
+	puts "}"
+	puts
+	puts
+end
+
+desc "RICC generate ipdatabase and sitelist for kgetall before"
+task :ricc_kgetbef do
+	puts "=> kgetbef: generating ipdatabase and sitelist for kgetall before...".bright
+	puts
+	kget("kgetbef")
+	puts
+end
+
+desc "RICC generate ipdatabase and sitelist for kgetall after"
+task :ricc_kgetaft do
+	puts "=> ricc_kgetaft: generate ipdatabase and sitelist for kgetall after...".bright
+	puts
+	kget("kgetaft")
+	puts
+end
+
+def kget(a_kget)
+	@sites = []
+    if a_kget == "kgetbef" then
+    	kget_cmds = cmdgetifs('pv $kgetbef_')
+    else
+    	kget_cmds = cmdgetifs('pv $kgetaft_')
+	end
+    kget_cmds.each do |cmd| 
+     	if a_kget == "kgetbef" then   	
+    		site_name = cmdattrifs(cmd,/^\$kgetbef_nodename\s=\s(\w+)$/)
+    		site_ip = cmdattrifs(cmd, /^\$kgetbef_ip\s=\s(\d*\.\d*\.\d*\.\d*)$/)
+    	else
+    		site_name = cmdattrifs(cmd,/^\$kgetaft_nodename\s=\s(\w+)$/)
+    		site_ip = cmdattrifs(cmd, /^\$kgetaft_ip\s=\s(\d*\.\d*\.\d*\.\d*)$/)
+    	end   	
+    	site = {:name => site_name, :ip => site_ip}
+    	@sites << site if !@sites.include? site
+    end
+	File.open("#{TODAY}/ipdatabase_#{a_kget}", "w") do |file|
+		@sites.each do |s| 
+			file.puts "#{s[:name]} #{s[:ip]}"
+		end
+    end
+    File.open("#{TODAY}/sitelist_#{a_kget}", "w") do |file|
+		@sites.each do |s| 
+			file.puts "#{s[:name]}"
+		end
+    end
+	puts "-- files ipdatabase and sitelist:".color(:yellow)
+    system %{ls -la "#{TODAY}" | egrep "ipdatabase_#{a_kget}|sitelist_#{a_kget}"}
+    puts
+    puts "-- contents file ipdatabase:".color(:yellow)
+    system %{cat "#{TODAY}/ipdatabase_#{a_kget}"}
+    puts
+    puts "-- contents file sitelist:".color(:yellow)
+    system %{cat "#{TODAY}/sitelist_#{a_kget}"}
+    puts
+    puts "-- mobatch script:".color(:yellow)
+    if a_kget == 'kgetbef' then
+    	Clipboard.set_data("~/moshell/mobatch -p 50 -t 60 -v ip_database=/tmp/kgetall_before/ipdatabase_#{a_kget} /tmp/kgetall_before/sitelist_#{a_kget} 'lt all;kget' /tmp/kgetall_before")
+	else
+		Clipboard.set_data("~/moshell/mobatch -p 50 -t 60 -v ip_database=/tmp/kgetall_after/ipdatabase_#{a_kget} /tmp/kgetall_after/sitelist_#{a_kget} 'lt all;kget' /tmp/kgetall_after")
+	end
+	puts Clipboard.data
+	puts
+end
+
+desc "RICC lacsget  from clipboard"
+task :ricc_lacsget do
+	puts "=> ricc_lacsget: getting lacs/cellids from clipboard...".bright
+	puts
+	@lac_cellid = []
+	lac = Clipboard.data
+	lac = lac.split("\n")
+	lac.each do |line|
+		if line =~ /lac\s+(\d+)/ then
+			puts "LAC #{$1}"
+			@lac_cellid << "LAC #{$1}\n"
+		end
+		if line =~ /UtranCell\=(\w+)\s+localCellId\s+(\d+)/ then
+			puts "#{$1}-UtranCellId-#{$2}"
+			@lac_cellid << "#{$1}-UtranCellId-#{$2}\n"
+		end
+	end
+	Clipboard.set_data(@lac_cellid.to_s)
+end
+
+desc "RICC strtall  from logs against sites"
+task :ricc_strtall, [:a_activity] do |t, args|
+	puts "=> ricc_strtall: getting strt commands from log files against sites...".bright
+	puts
+	args.with_defaults(:a_activity => "fullip")
+	sites = args.a_sites	
+	activity = args.a_activity.downcase
+	sites_data = Clipboard.data
+	sites_data = sites_data.split("\n")
+	sites_data.each do |line|
+		line = line.split
+		site = line[0]
+		@rnc_name =  line[1]
+		@rncto_name = line[2]
+		puts "-- #{site} ".color(:yellow)
+		puts " MOD  IUBLINK              CELLNAMES           CFRPHEM1 CFRPHEM2 CFRPHEM3 CFRPHEM4 CFRPHEM5 CFRPHEM6 ICDS   TN ATMPORTS".underline.color(:cyan)
+		cmds = cmdgetifs4(@rnc_name,'strt')
+		cmds.each do |cmd|
+			cmd.each do |line|
+				if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+						puts "#{$1} #{@rnc_name} ".color(:cyan)
+					end
+				if line =~ /#{site}/ then
+					if line[46..-1] =~ /L+|0+/ then
+						puts line.color(:red)
+					else
+						puts line.color(:green) 
+					end
+				end
+			end
+		end
+		if activity == 'rehoming' then
+			cmds = cmdgetifs4(@rncto_name,'strt')
+			cmds.each do |cmd|
+				cmd.each do |line|
+					if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+						puts "#{$1} #{@rncto_name} ".color(:cyan)
+					end
+					if line =~ /#{site}/ then
+						if line[46..-1] =~ /L+|0+/ then
+							puts line.color(:red)
+						else
+							puts line.color(:green) 
+						end
+					end
+				end
+			end	
+		end		
+		puts	
+	end
+end
+
+desc "RICC sessions for secureCRT"
+task :ricc_sessions do 
+	puts "=> ricc_sessions: generating script sessions for secureCRT...".bright
+	puts
+	@rncs = []
+	@rxis = []
+	File.open("#{TODAY}/ricc_sessions.vbs", "w") do |riccfile|
+	riccfile.puts "Dim objProdTab, objTestTab, objDevTab"
+	riccfile.puts
+	riccfile.puts "Set objProdTab = crt.Session.ConnectInTab(\"/S CLARO_portforwarding2\")"
+	riccfile.puts "objProdTab.Screen.Synchronous = True"
+	riccfile.puts "crt.Sleep 1000"
+	riccfile.puts "objProdTab.Screen.WaitForString \"ssg-clarosp >\", 2"
+	riccfile.puts
+	sites_data = Clipboard.data
+	sites_data = sites_data.split("\r\n")
+	sites_data.each do |line|
+		line = line.split
+#		@site = line[0]
+		line.each do |node|
+			if node =~ /^U|^W|^K|^C/ then
+				@site = node
+			end
+			if node =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/ then
+				@site_ip = node
+			end
+			if node =~ /^RNC/ and !@rncs.include? node then
+				@rncs << node
+			end
+			if node =~ /^RXI/ and !@rxis.include? node then
+				@rxis << node
+			end
+		end
+		riccfile.puts "Set objProdTab = crt.Session.ConnectInTab(\"/S CLARO_localhost2\")"
+		riccfile.puts "objProdTab.Screen.Synchronous = True"
+		riccfile.puts "crt.Sleep 1000"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"cd moshell\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"setenv ricc_customer CLARO\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"./moshell -v ricc_customer=$ricc_customer #{@site_ip}\" & vblf"
+		riccfile.puts "objProdTab.Caption = \"#{@site}\""
+		riccfile.puts "objProdTab.Screen.WaitForString \"#{@site}>\", 1"
+		riccfile.puts
+	end
+	@rncs.each do |node|
+		riccfile.puts "Set objProdTab = crt.Session.ConnectInTab(\"/S CLARO_localhost2\")"
+		riccfile.puts "objProdTab.Screen.Synchronous = True"
+		riccfile.puts "crt.Sleep 1000"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"cd moshell\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"setenv ricc_customer CLARO\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"./moshell -v ricc_customer=$ricc_customer #{node}\" & vblf"
+		riccfile.puts "objProdTab.Caption = \"#{node}\""
+		riccfile.puts "objProdTab.Screen.WaitForString \"#{node}>\", 1"
+		riccfile.puts	
+	end
+	@rxis.each do |node|
+		riccfile.puts "Set objProdTab = crt.Session.ConnectInTab(\"/S CLARO_localhost2\")"
+		riccfile.puts "objProdTab.Screen.Synchronous = True"
+		riccfile.puts "crt.Sleep 1000"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"cd moshell\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"setenv ricc_customer CLARO\" & vblf"
+		riccfile.puts "objProdTab.Screen.WaitForString \"T3196747@erosapp7rj>\", 1"
+		riccfile.puts "objProdTab.Screen.Send \"./moshell -v ricc_customer=$ricc_customer #{node}\" & vblf"
+		riccfile.puts "objProdTab.Caption = \"#{node}\""
+		riccfile.puts "objProdTab.Screen.WaitForString \"#{node}>\", 1"
+		riccfile.puts	
+	end
+	end
+	puts "-- VB script generated for secureCRT:".color(:yellow)
+    system %{ls -la #{TODAY}/ricc_sessions.vbs}
+    puts
+end
+
+desc "RICC cmdsget  from logs"
+task :ricc_cmdsget, [:a_site, :a_cmd] do |t, args|
+	puts "=> ricc_cmdsget: getting commands from log files...".bright
+	puts
+	args.with_defaults(:a_site => "", :a_cmd => "")
+	site = args.a_site
+	cmd = args.a_cmd
+	cmds = cmdgetifs4(site,cmd)
+	cmds.each do |cmd|
+		cmd.each do |line|
+			if line =~ CMD_REGEX then
+				puts line
+			else
+				puts line.color(:cyan)
+			end
+		end
+		puts
+	end
+end
+
+desc "RICC ipsget  from nodebs_claro.txt template"
+task :ricc_ipsget do
+	puts "=> ricc_ipsget: getting nodeb ips from nodebs_claro.txt template...".bright
+	puts 
+	ips = []
+	sites = Clipboard.data
+	sites = sites.split("\r\n")
+	sites.each do |site|	
+		File.open("#{RICC_TEMPLATES}/#{RICC_NODEBS_CLARO}", "r") do |file|
+	  		lines = file.readlines
+	  		site_found = false
+	  		lines.each do |line|
+	  			if line.include? "#{site}" then
+	  				site_found = true
+	 				if line =~ /\w\w\w\w\w\w\w\w\t(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\t?/ then
+	 					ips << "#{$1}\r\n"
+					end
+	  			end
+	  		end
+	  		if site_found == false then
+	  			ips << "NOT FOUND"
+	  		end
+	  	end
+   	end
+   	puts ips
+  	Clipboard.set_data(ips.to_s)
+end
+
+desc "RICC strt     from logs against sites"
+task :ricc_strt, [:a_sites, :a_activity] do |t, args|
+	puts "=> ricc_strt: getting strt commands from log files against sites...".bright
+	puts
+	args.with_defaults(:a_sites => "no_site", :a_activity => "fullip")
+	sites = args.a_sites	
+	activity = args.a_activity.downcase
+	if sites != "no_site" then
+		sites = sites.split
+		sites.each do |site|
+			puts "-- #{site} ".color(:yellow)
+			puts " MOD  IUBLINK              CELLNAMES           CFRPHEM1 CFRPHEM2 CFRPHEM3 CFRPHEM4 CFRPHEM5 CFRPHEM6 ICDS   TN ATMPORTS".underline.color(:cyan)
+			get_nodeb_data(site)
+			cmds = cmdgetifs4(@rnc_name,'strt')
+			cmds.each do |cmd|
+				cmd.each do |line|
+					if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+							puts "#{$1} #{@rnc_name} ".color(:cyan)
+						end
+					if line =~ /#{site}/ then
+						if line[46..-1] =~ /L+|0+/ then
+							puts line.color(:red)
+						else
+							puts line.color(:green) 
+						end
+					end
+				end
+			end
+			if activity == 'rehoming' then
+				cmds = cmdgetifs4(@rncto_name,'strt')
+				cmds.each do |cmd|
+					cmd.each do |line|
+						if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+							puts "#{$1} #{@rncto_name} ".color(:cyan)
+						end
+						if line =~ /#{site}/ then
+							if line[46..-1] =~ /L+|0+/ then
+								puts line.color(:red)
+							else
+								puts line.color(:green) 
+							end
+						end
+					end
+				end	
+			end		
+			puts
+		end
+	else
+		load_ricc_data	
+		@ricc_activities.each do |a| 
+    		sites = a['sites']
+    		activity = a['activity'].downcase
+    		sites.each do |site|
+				puts "-- #{site} ".color(:yellow)
+    			puts " MOD  IUBLINK              CELLNAMES           CFRPHEM1 CFRPHEM2 CFRPHEM3 CFRPHEM4 CFRPHEM5 CFRPHEM6 ICDS   TN ATMPORTS".underline.color(:cyan)
+				get_nodeb_data(site)
+				cmds = cmdgetifs4(@rnc_name,'strt')
+				cmds.each do |cmd|
+					cmd.each do |line|
+						if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+							puts "#{$1} #{@rnc_name} ".color(:cyan)
+						end
+						if line =~ /#{site}/ then
+							if line[46..-1] =~ /L+|0+/ then
+								puts line.color(:red)
+							else
+								puts line.color(:green) 
+							end
+						end
+					end
+				end
+				if activity == 'rehoming' then
+					cmds = cmdgetifs4(@rncto_name,'strt')
+					cmds.each do |cmd|
+						cmd.each do |line|
+							if line =~ /^(\d\d\d\d\d\d-\d\d:\d\d)/ then
+								puts "#{$1} #{@rncto_name} ".color(:cyan)							
+							end
+							if line =~ /#{site}/ then
+								if line[46..-1] =~ /L+|0+/ then
+									puts line.color(:red)
+								else
+									puts line.color(:green) 
+								end
+							end
+						end
+					end	
+				end		
+				puts
+			end 
+		end
+	end
+end
+
+def cmdgetifs4(a_site, a_cmd)
+	cmds = []
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX2 and ($1.include? "#{a_site}" and lines[i].include? "#{a_cmd}") then
+            				cmd_found = true
+            				result << lines[i].chop		
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX2) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						cmds << result
+    						result=[]
+							cmd_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+	return cmds
+end
+
+def cmdgetifs3(a_site, a_cmd)
+	cmds = []
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX2 and lines[i].include? "#{a_cmd}" then
+            				cmd_found = true
+            				result << lines[i].chop		
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX2) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						result.each_index do |r|
+    							if result[r].include? "#{a_site}" then
+    								cmds << result
+    							end
+							end
+    						result=[]
+							cmd_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+	return cmds
+end
+
+def cmdgetif2(a_cmd, a_site)
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX and lines[i].include? "#{a_cmd}" then
+            				cmd_found = true
+            				result << lines[i].chop	
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						result.each_index do |r|
+    							if result[r].include? "#{a_site}" then
+    								return result
+    								break
+    							end
+							end
+							result=[]
+							cmd_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+end
+
+def cmdgetifs(a_cmd)
+	cmds = []
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				cmd_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if cmd_found == false then
+            			if lines[i] =~ CMD_REGEX and lines[i].include? "#{a_cmd}" then
+            				cmd_found = true
+            				result << lines[i].chop		
+    					end
+    				else
+    					if (lines[i+1] =~ CMD_REGEX) or (lines[i+1] == nil) then
+    						result << lines[i].chop
+    						cmds << result
+    						result=[]
+							cmd_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+	return cmds
+end
+
+def cmdattrifs(a_cmd, a_regex)
+	if a_cmd != nil then
+		a_cmd.each do |cmdline|
+			if cmdline =~ a_regex then
+				return $1
+				break
+			end 
+	    end
+	    return nil
+	end
+end
+
+desc "RICC logs get from ricc log files"
+task :ricc_logsget do
+	puts "=> ricc_logsget: getting logs from ricc log files...".bright
+	puts
+	logsget
+	puts "-- log files from ricc logs:".color(:yellow)
+    system %{ls -la "#{TODAY}" | egrep "*txt$"}
+    puts
+end
+
+def get_dmps(a_riccname, a_kget)
+	@dmps = []
+	Find.find("#{RICC_ARCHIVE}/#{a_riccname}") do |f|
+		if File.basename(f) =~ /\.dmp/
+ 			@log_file = f
+			if @log_file.include? "#{a_kget}" then
+				@dmps << @log_file
+			end
+    	end
+	end
+	return @dmps
+end
+
+def logsget
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				log_found = false
+				result=[]
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if log_found == false then
+            			if lines[i] =~ /^Logging to file:/ then
+            				log_found = true
+            				@log_name = lines[i].chop.split('/')[-1]	
+    					end
+    				else
+    					if lines[i] =~ /^Log close:/ then
+							File.open("#{TODAY}/#{@log_name}", "w") do |file|
+								result.each {|s| file.puts s}
+    						end
+    						@log_time = "20"+ @log_name.split('_')[0]+ @log_name.split('_')[1]
+    						@log_time = DateTime.parse(@log_time).to_local_time
+    						File.utime(0, @log_time, "#{TODAY}/#{@log_name}")
+    						result=[]
+				            log_found = false
+    					else
+    						result << lines[i].chop
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+end
+
+def get_lognames
+	@log_names = []
+	Find.find("#{TODAY}") do |f|
+		if File.basename(f) =~ /\.log/
+ 			@log_file = f
+			File.open(@log_file, "r") do |file|
+				log_found = false
+			    lines = file.readlines
+			    lines.each_index do |i|
+			    	if log_found == false then
+            			if lines[i] =~ /^Logging to file:/ then
+            				log_found = true
+            				@log_name = lines[i].chop.split('/')[-1]
+            				@log_names << @log_name	
+    					end
+    				else
+    					if lines[i] =~ /^Log close:/ then
+				            log_found = false
+   				  		end 
+    				end
+    			end
+    		end
+    	end
+	end
+	return @log_names
+end
+
+class Time
+  def to_datetime
+    # Convert seconds + microseconds into a fractional number of seconds
+    seconds = sec + Rational(usec, 10**6)
+
+    # Convert a UTC offset measured in minutes to one measured in a
+    # fraction of a day.
+    offset = Rational(utc_offset, 60 * 60 * 24)
+    DateTime.new(year, month, day, hour, min, seconds, offset)
+  end
+end
+
+class Date
+  def to_gm_time
+    to_time(new_offset, :gm)
+  end
+
+  def to_local_time
+  	offset = Rational(-3, 24)
+    to_time(new_offset(DateTime.now.offset-offset), :local)
+  end
+
+  private
+  def to_time(dest, method)
+    #Convert a fraction of a day to a number of microseconds
+    usec = (dest.sec_fraction * 60 * 60 * 24 * (10**6)).to_i
+    Time.send(method, dest.year, dest.month, dest.day, dest.hour, dest.min,
+              dest.sec, usec)
+  end
+end
+
+desc "RICC cleanup         for TODAY directory"
+task :ricc_cleanup do
+	puts "=> ricc_cleanup: cleaning TODAY directory...".bright
+	puts
+    system %{cd "#{TODAY}";rm -rf *}
+    puts "-- contents of TODAY directory:".color(:yellow)
+    system %{ls -la "#{TODAY}"}
+    puts
+end
